@@ -8,19 +8,22 @@ import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
+import java.util.zip.GZIPInputStream;
 
-public class GeoIPPanel extends JPanel implements WindowListener {
+public class GeoIPPanel extends JPanel {
 
-    File datFile = null;
+    public static final File DEFAULT_DAT_FILE = new File(System.getProperty("user.home"), "GeoIP.dat");
+    private static final String LATEST_DAT_FILE = "http://geolite.maxmind.com/download/geoip/database/GeoLiteCountry/GeoIP.dat.gz";
+
     LookupService lookupService = null;
+    JLabel latestLabel;
+    JButton latestButton;
     JLabel browseLabel;
     JButton browseButton;
     JLabel addressLabel;
@@ -35,9 +38,17 @@ public class GeoIPPanel extends JPanel implements WindowListener {
     public GeoIPPanel() {
         super(new SpringLayout());
 
+
+        latestButton = new JButton("Download");
+        latestButton.addActionListener(new LatestListener());
+        latestLabel = new JLabel("Get latest database");
+        latestLabel.setLabelFor(latestButton);
+        add(latestLabel);
+        add(latestButton);
+
         browseButton = new JButton("Browse...");
         browseButton.addActionListener(new BrowseListener());
-        browseLabel = new JLabel("Choose database");
+        browseLabel = new JLabel("Open database file");
         browseLabel.setLabelFor(browseButton);
         add(browseLabel);
         add(browseButton);
@@ -77,37 +88,72 @@ public class GeoIPPanel extends JPanel implements WindowListener {
         add(countryCodeLabel);
         add(countryCodeField);
 
-        SpringUtilities.makeCompactGrid(this, 5, 2, 6, 6, 6, 6);
+        SpringUtilities.makeCompactGrid(this, 6, 2, 6, 6, 6, 6);
+
+    }
+
+    public void updateDatFromLatest() throws IOException {
+
+        URL url = new URL(LATEST_DAT_FILE);
+
+        File latest = DEFAULT_DAT_FILE;
+        File latestParent = latest.getParentFile();
+
+        if (latestParent.isDirectory() || latestParent.mkdirs()) {
+            File temp = File.createTempFile("geoip", ".latest.dat", latest.getParentFile());
+
+            InputStream is = null;
+            OutputStream os = null;
+            LookupService testLookupService = null;
+            try {
+                is = new GZIPInputStream(url.openStream());
+                os = new FileOutputStream(temp);
+                IOUtils.copy(is, os);
+
+                // try to create a new lookup service
+
+                testLookupService = new LookupService(temp, LookupService.GEOIP_MEMORY_CACHE);
+                System.out.println(
+                        "Successfully downloaded latest database: "
+                                + testLookupService.getDatabaseInfo()
+                );
+
+            } finally {
+                IOUtils.closeQuietly(is);
+                IOUtils.closeQuietly(os);
+                if (testLookupService != null) {
+                    testLookupService.close();
+                }
+            }
+
+            if (latest.exists()) {
+                latest.delete();
+            }
+
+            if (temp.renameTo(latest)) {
+                if (this.lookupService != null) {
+                    this.lookupService.close();
+                }
+                this.lookupService = new LookupService(latest, LookupService.GEOIP_MEMORY_CACHE);
+                this.enableLookup();
+            } else {
+                temp.delete();
+            }
+        }
     }
 
     public void updateDatFile(File file) throws IOException {
         if (file != null && file.exists()) {
-            File toDelete = null;
-            if (datFile != null) {
-                toDelete = datFile;
-            }
 
-            datFile = File.createTempFile("geoip", "dat");
-
-            InputStream is = null;
-            OutputStream os = null;
-            try {
-                is = new FileInputStream(file);
-                os = new FileOutputStream(datFile);
-                IOUtils.copy(is, os);
-            } finally {
-                IOUtils.closeQuietly(is);
-                IOUtils.closeQuietly(os);
-            }
-
-            lookupService = new LookupService(datFile,
+            LookupService temp = new LookupService(file,
                                               LookupService.GEOIP_MEMORY_CACHE);
 
-            this.enableLookup();
-
-            if (toDelete != null) {
-                toDelete.delete();
+            if (lookupService != null) {
+                lookupService.close();
             }
+            lookupService = temp;
+
+            this.enableLookup();
         }
 
     }
@@ -134,6 +180,20 @@ public class GeoIPPanel extends JPanel implements WindowListener {
             } else {
                 this.countryNameField.setText("");
                 this.countryCodeField.setText("");
+            }
+        }
+    }
+
+    class LatestListener implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            try {
+                GeoIPPanel.this.setEnabled(false);
+                GeoIPPanel.this.updateDatFromLatest();
+            } catch (IOException e) {
+                e.printStackTrace(System.err);
+            } finally {
+                GeoIPPanel.this.setEnabled(true);
             }
         }
     }
@@ -167,18 +227,4 @@ public class GeoIPPanel extends JPanel implements WindowListener {
         }
     }
 
-    @Override public void windowOpened(WindowEvent e) { }
-    @Override public void windowClosing(WindowEvent e) { }
-
-    @Override
-    public void windowClosed(WindowEvent e) {
-        if (this.datFile != null) {
-            this.datFile.delete();
-        }
-    }
-
-    @Override public void windowIconified(WindowEvent e) { }
-    @Override public void windowDeiconified(WindowEvent e) { }
-    @Override public void windowActivated(WindowEvent e) { }
-    @Override public void windowDeactivated(WindowEvent e) { }
 }

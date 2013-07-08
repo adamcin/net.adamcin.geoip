@@ -16,8 +16,6 @@ public final class Main {
         JFrame frame = new JFrame("GeoIP Lookup");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-        frame.addWindowListener(panel);
-
         frame.add(panel);
 
         frame.pack();
@@ -26,7 +24,7 @@ public final class Main {
 
     public static void main(String[] args) {
 
-        final File pathArg = args.length > 0 ? new File(args[0]) : null;
+        final File pathArg = args.length > 0 ? new File(args[0]) : GeoIPPanel.DEFAULT_DAT_FILE;
         javax.swing.SwingUtilities.invokeLater(new Runnable() {
             @Override
             public void run() {
