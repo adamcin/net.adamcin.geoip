@@ -80,7 +80,7 @@ public class GeoIPPanel extends JPanel implements WindowListener {
         SpringUtilities.makeCompactGrid(this, 5, 2, 6, 6, 6, 6);
     }
 
-    private void updateDatFile(File file) throws IOException {
+    public void updateDatFile(File file) throws IOException {
         if (file != null && file.exists()) {
             File toDelete = null;
             if (datFile != null) {
